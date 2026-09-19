@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#F4E7D3" />
+  <meta name="description" content="JakJak — a calm, offline-first collection of playful learning toys." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+  <link rel="icon" href="./assets/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>JakJak</title>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <button id="brandButton" class="brand" aria-label="JakJak home">JakJak</button>
+      <div class="top-actions">
+        <button id="homeButton" class="icon-btn hidden" aria-label="Home">⌂</button>
+        <button id="resetButton" class="icon-btn hidden" aria-label="Reset toy">↻</button>
+      </div>
+    </header>
+
+    <main id="main" class="main-content" tabindex="-1">
+      <section id="homeScreen" class="screen active" aria-labelledby="homeTitle">
+        <div class="hero">
+          <div class="sun" aria-hidden="true"></div>
+          <p class="eyebrow">PLAY • EXPLORE • DISCOVER</p>
+          <h1 id="homeTitle">JakJak</h1>
+          <p class="subtitle">Pick a toy.</p>
+        </div>
+        <div id="toyGrid" class="toy-grid" aria-label="Toy box"></div>
+      </section>
+
+      <section id="gameScreen" class="screen" aria-live="polite">
+        <div id="gameHeader" class="game-heading">
+          <p id="gameKicker" class="eyebrow"></p>
+          <h2 id="gameTitle"></h2>
+          <p id="gameHint" class="game-hint"></p>
+        </div>
+        <div id="gameMount" class="game-mount"></div>
+      </section>
+    </main>
+
+    <button id="parentHotspot" class="parent-hotspot" aria-label="Parent settings">•••</button>
+
+    <dialog id="parentGate" class="modal-card">
+      <form method="dialog" id="gateForm">
+        <h2>Parent check</h2>
+        <p>What is <strong>7 + 4</strong>?</p>
+        <label>
+          <span class="sr-only">Answer</span>
+          <input id="gateAnswer" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" />
+        </label>
+        <p id="gateError" class="error-text" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary-btn">Cancel</button>
+          <button id="gateSubmit" value="default" class="primary-btn">Continue</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="settingsDialog" class="modal-card settings-card">
+      <form method="dialog" id="settingsForm">
+        <div class="dialog-title-row">
+          <div>
+            <p class="eyebrow">PARENT AREA</p>
+            <h2>JakJak settings</h2>
+          </div>
+          <button id="closeSettings" type="button" class="icon-btn" aria-label="Close settings">×</button>
+        </div>
+
+        <fieldset>
+          <legend>Toys on home screen</legend>
+          <div id="toyToggles" class="toggle-list"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Sound</legend>
+          <label class="range-row">Volume
+            <input id="volumeRange" type="range" min="0" max="1" step="0.05" />
+          </label>
+          <label class="switch-row"><span>Background music</span><input id="musicToggle" type="checkbox" /></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Comfort</legend>
+          <label class="switch-row"><span>Calm motion</span><input id="calmMotionToggle" type="checkbox" /></label>
+          <label class="select-row"><span>Home screen choices</span>
+            <select id="choiceCountSelect"><option value="4">4 toys</option><option value="6">6 toys</option></select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Play session</legend>
+          <label class="select-row"><span>Reminder</span>
+            <select id="sessionSelect"><option value="0">Off</option><option value="20">20 minutes</option><option value="30">30 minutes</option></select>
+          </label>
+          <label class="select-row"><span>Transition warning</span>
+            <select id="warningSelect"><option value="0">Off</option><option value="2">2 minutes</option><option value="5">5 minutes</option></select>
+          </label>
+        </fieldset>
+
+        <div class="dialog-actions stacked-mobile">
+          <button id="resetSettings" type="button" class="secondary-btn">Restore defaults</button>
+          <button value="save" class="primary-btn">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
