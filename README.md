@@ -85,3 +85,8 @@ jakjak/
 - No lives, scores, streaks, coins, or failure states
 - Calm motion enabled by default
 - Parent-adjustable toy visibility, volume, motion, and session reminders
+
+
+## v0.3 — Basketball
+
+Adds a touch-first basketball toy with four modes: Free Shoot, Around the Court, Moving Hoop, and Bank Shot. Basketball uses direct flick physics, a trajectory preview while aiming, rim/backboard collisions, local best-streak storage, and no network services.
