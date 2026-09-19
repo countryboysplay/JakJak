@@ -1,92 +1,58 @@
-# JakJak
+# JakJak PWA v0.5
 
-JakJak is a calm, offline-first PWA toy box designed for a preschool-aged child. It is intentionally simple: no accounts, no ads, no analytics, no backend, and no external runtime dependencies.
+JakJak is a build-free, offline-first PWA toy box designed for touch devices and GitHub Pages. The guiding idea is **simple controls, deep toys**: activities should be easy to operate while giving a curious child something real to notice, test, plan, and learn.
 
-## Included toys
+## Toys
 
-- Tinker Board — switches, knobs, sliders, gears, cause/effect
-- Shape Workshop — large, forgiving shape matching
+- Tinker Board — working machine sandbox with motors, fan, magnet, gate, conveyor direction, and moving balls
+- Shape Workshop — build puzzles, symmetry, pattern logic, and free construction
 - Creature Builder — open-ended creature creation
-- Marble Lab — simple tap-and-watch physics play
-- Number Garden — quantities and one-to-one counting
-- Sound Garden — gentle synthesized musical pads
+- Marble Lab — physics experimentation
+- Basketball — skill-based shooting with multiple challenge modes
+- Bowling — aim, power, hook, pin physics, three modes, and 10 saved ball colors
+- Number Garden — counting, comparing quantities, number bonds, and number sequences
+- Logic Tracks — program a robot with directional commands and solve obstacle courses
+- Balance Lab — combine number weights until both sides of a scale are equal
+- Circuit Lab — experiment with conductors, insulators, switches, and simple powered devices
+- Number Machine — choose inputs and operations to create target numbers
+- Sound Garden — open-ended musical sound play
+
+## Adaptive challenge
+
+Number Garden, Logic Tracks, Balance Lab, Circuit Lab, and Number Machine store a small local progress level on the device. Successful solutions quietly increase the challenge without interrupting play with age labels or difficulty-selection screens.
+
+There are no accounts, cloud profiles, rewards economies, streak pressure, advertising, or analytics.
 
 ## Parent area
 
-Tap the subtle `•••` control in the lower-right corner **5 times quickly**. Complete the simple parent check to access settings. This avoids iPhone/iPad long-press text-selection and callout behavior.
+Tap the `•••` control in the lower-right corner five times quickly, then answer the parent check.
 
-Settings are stored locally in the browser/device with `localStorage`.
+The parent area can:
 
-## Run locally
+- enable or disable individual toys
+- show 4, 8, or all 12 toys on the home screen
+- control volume
+- enable calm motion
+- set optional play-session and transition reminders
 
-Any static server works. For example:
+## GitHub Pages deployment
 
-```bash
-python3 -m http.server 8080
-```
+1. Create or open a GitHub repository.
+2. Copy all files from this folder into the repository root.
+3. Commit and push.
+4. In GitHub, open **Settings → Pages**.
+5. Under **Build and deployment**, choose **Deploy from a branch**.
+6. Select the branch containing JakJak (usually `main`) and `/ (root)`.
+7. Save.
 
-Then open `http://localhost:8080`.
+The app uses relative URLs, so it works from a project path such as `https://username.github.io/jakjak/`.
 
-> Service workers do not run correctly from `file://`; use a local server while testing.
+## Offline / install
 
-## Deploy to GitHub Pages
+The service worker caches the app shell and assets. v0.5 uses cache name `jakjak-v5` so previously installed builds update after redeployment.
 
-This project uses only relative URLs, so it works from a GitHub Pages project subpath such as:
-
-`https://USERNAME.github.io/jakjak/`
-
-### Option A — Deploy from branch
-
-1. Create a GitHub repository named `jakjak`.
-2. Upload the contents of this folder to the repository root.
-3. In GitHub, open **Settings → Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**.
-5. Select the `main` branch and `/ (root)`.
-6. Save.
-
-### Option B — GitHub Actions
-
-A workflow can be added later if the project grows into a compiled app. This first version is intentionally build-free.
-
-## Install on iPhone/iPad
-
-1. Open the GitHub Pages URL in Safari.
-2. Tap **Share**.
-3. Tap **Add to Home Screen**.
-4. Launch JakJak from the new icon.
-
-After the first successful load, the service worker caches the core app for offline use.
+On iPhone/iPad, open the site in Safari and use **Share → Add to Home Screen**.
 
 ## Privacy
 
-JakJak contains no analytics, ads, accounts, tracking, location, camera, microphone, or external content. It does not include a child's real name, photo, birthday, school, location, or medical information.
-
-## Project structure
-
-```text
-jakjak/
-├── index.html
-├── styles.css
-├── app.js
-├── sw.js
-├── manifest.webmanifest
-├── README.md
-└── assets/
-    ├── icon-180.png
-    ├── icon-192.png
-    └── icon-512.png
-```
-
-## Design direction
-
-- Large touch targets
-- Minimal reading
-- Forgiving interaction
-- No lives, scores, streaks, coins, or failure states
-- Calm motion enabled by default
-- Parent-adjustable toy visibility, volume, motion, and session reminders
-
-
-## v0.3 — Basketball
-
-Adds a touch-first basketball toy with four modes: Free Shoot, Around the Court, Moving Hoop, and Bank Shot. Basketball uses direct flick physics, a trajectory preview while aiming, rim/backboard collisions, local best-streak storage, and no network services.
+JakJak has no backend, account system, analytics, advertising, location access, microphone access, or camera access. Settings, selected bowling-ball color, best scores, and learning progress remain in local browser/device storage.

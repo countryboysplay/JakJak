@@ -1,4 +1,4 @@
-const CACHE = 'jakjak-v3';
+const CACHE = 'jakjak-v5';
 const ASSETS = [
   './',
   './index.html',
