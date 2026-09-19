@@ -189,9 +189,25 @@
   }
 
   function setupParentGate(){
-    const start=()=>{clearTimeout(state.heldTimer);state.heldTimer=setTimeout(()=>{parentGate.showModal();$('#gateAnswer').value='';$('#gateError').textContent='';setTimeout(()=>$('#gateAnswer').focus(),80)},1800)};
-    const end=()=>clearTimeout(state.heldTimer);
-    parentHotspot.addEventListener('pointerdown',start);['pointerup','pointercancel','pointerleave'].forEach(e=>parentHotspot.addEventListener(e,end));
+    let tapCount=0;
+    let tapTimer=null;
+    const resetTaps=()=>{tapCount=0;clearTimeout(tapTimer);tapTimer=null;};
+    const openGate=()=>{
+      resetTaps();
+      if(parentGate.open)return;
+      parentGate.showModal();
+      $('#gateAnswer').value='';
+      $('#gateError').textContent='';
+      setTimeout(()=>$('#gateAnswer').focus(),80);
+    };
+    parentHotspot.addEventListener('click',e=>{
+      e.preventDefault();
+      tapCount++;
+      clearTimeout(tapTimer);
+      if(tapCount>=5){openGate();return;}
+      tapTimer=setTimeout(resetTaps,2500);
+    });
+    parentHotspot.addEventListener('contextmenu',e=>e.preventDefault());
     $('#gateForm').addEventListener('submit',e=>{e.preventDefault();if($('#gateAnswer').value.trim()==='11'){parentGate.close();openSettings()}else{$('#gateError').textContent='Try again.';tone(180,.12,'sine',.04)}});
   }
   function openSettings(){

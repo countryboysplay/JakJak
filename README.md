@@ -13,7 +13,7 @@ JakJak is a calm, offline-first PWA toy box designed for a preschool-aged child.
 
 ## Parent area
 
-Press and hold the subtle `•••` control in the lower-right corner for about 2 seconds. Complete the simple parent check to access settings.
+Tap the subtle `•••` control in the lower-right corner **5 times quickly**. Complete the simple parent check to access settings. This avoids iPhone/iPad long-press text-selection and callout behavior.
 
 Settings are stored locally in the browser/device with `localStorage`.
 
