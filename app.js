@@ -327,27 +327,37 @@
     const SHAPE_SIZE={circle:30,square:34,triangle:38,rect:38,diamond:35};
 
     function dims(){return{w:c.clientWidth,h:c.clientHeight};}
+    // Shapes shrink on narrow canvases so pieces and targets do not overlap on phones.
+    function unit(){const {w,h}=dims();return Math.min(1,Math.min(w/5.2,h/3.4)/105);}
+    let lastW=0,lastH=0,lastUnit=1;
     function resize(){
       const r=c.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
-      if(mode!=='pattern') setupMode(true);
+      const {w,h}=dims();if(!w||!h||mode==='pattern')return;
+      // Mobile browser bars and rotation resize the canvas; keep the puzzle in progress instead of restarting it.
+      if(lastW&&(pieces.length||targets.length)){
+        const sx=w/lastW,sy=h/lastH,k=unit()/lastUnit;
+        for(const o of [...targets,...pieces,...symmetrySource]){o.x*=sx;o.y*=sy;o.size*=k;}
+        draw();
+      }else setupMode();
+      lastW=w;lastH=h;lastUnit=unit();
     }
     const ro=new ResizeObserver(resize);ro.observe(c);
 
     function targetLayout(parts){
       const {w,h}=dims(),cx=w*.5,cy=h*.39,scale=Math.min(w/5.2,h/3.4);
-      return parts.map(([type,id,nx,ny,rot])=>({id,type,x:cx+nx*scale,y:cy+ny*scale,rot,size:SHAPE_SIZE[type],filled:false}));
+      return parts.map(([type,id,nx,ny,rot])=>({id,type,x:cx+nx*scale,y:cy+ny*scale,rot,size:SHAPE_SIZE[type]*unit(),filled:false}));
     }
     function trayPieces(types){
-      const {w,h}=dims(),n=types.length,usable=w-38,step=usable/n;
-      return types.map((type,i)=>({id:`p${i}-${Date.now()}`,type,x:19+step*(i+.5),y:h*.84,rot:0,size:SHAPE_SIZE[type],color:COLORS[i%COLORS.length],locked:false}));
+      const {w,h}=dims(),n=types.length,usable=w-38,step=usable/n,k=unit();
+      return types.map((type,i)=>({id:`p${i}-${Date.now()}`,type,x:19+step*(i+.5),y:h*.84,rot:0,size:Math.min(SHAPE_SIZE[type]*k,step/2.4),color:COLORS[i%COLORS.length],locked:false}));
     }
     function symmetrySetup(){
-      const {w,h}=dims(),cx=w*.5;
+      const {w,h}=dims(),cx=w*.5,k=unit();
       const base=[
-        {type:'triangle',x:cx-w*.28,y:h*.27,rot:25,size:34},
-        {type:'square',x:cx-w*.18,y:h*.45,rot:0,size:32},
-        {type:'diamond',x:cx-w*.31,y:h*.60,rot:45,size:32},
-        {type:'circle',x:cx-w*.13,y:h*.66,rot:0,size:27}
+        {type:'triangle',x:cx-w*.28,y:h*.27,rot:25,size:34*k},
+        {type:'square',x:cx-w*.18,y:h*.45,rot:0,size:32*k},
+        {type:'diamond',x:cx-w*.31,y:h*.60,rot:45,size:32*k},
+        {type:'circle',x:cx-w*.13,y:h*.66,rot:0,size:27*k}
       ];
       targets=base.map((b,i)=>({id:i,type:b.type,x:cx+(cx-b.x),y:b.y,rot:(360-b.rot)%360,size:b.size,filled:false,ghostSource:b}));
       pieces=trayPieces(base.map(x=>x.type));
@@ -356,10 +366,11 @@
     }
     let symmetrySource=[];
 
-    function setupMode(keepSize=false){
+    function setupMode(){
+      patternPanel.classList.add('hidden');c.classList.remove('hidden');tools.classList.remove('hidden');
       if(!c.clientWidth||!c.clientHeight)return;
       selected=null;drag=null;
-      patternPanel.classList.add('hidden');c.classList.remove('hidden');tools.classList.remove('hidden');
+      if(mode!=='symmetry')symmetrySource=[];
       if(mode==='build'){
         const p=puzzles[challenge%puzzles.length];nameEl.textContent=p.name;iconEl.textContent=p.icon;msg.textContent=p.message;
         targets=targetLayout(p.parts);pieces=trayPieces(p.parts.map(x=>x[0]));progressEl.textContent=`0 / ${targets.length}`;
@@ -417,7 +428,7 @@
       let best=null,bd=Infinity;
       for(const t of targets){if(t.filled||t.type!==piece.type)continue;const d=Math.hypot(piece.x-t.x,piece.y-t.y);if(d<bd){bd=d;best=t;}}
       if(best&&bd<Math.max(48,piece.size*1.45)&&rotOkay(piece,best)){
-        piece.x=best.x;piece.y=best.y;piece.rot=best.rot;piece.locked=true;best.filled=true;selected=null;successChime();
+        piece.x=best.x;piece.y=best.y;piece.rot=best.rot;piece.size=best.size;piece.locked=true;best.filled=true;selected=null;successChime();
         const n=targets.filter(t=>t.filled).length;progressEl.textContent=`${n} / ${targets.length}`;
         if(n===targets.length){msg.textContent=mode==='symmetry'?'Perfect mirror. Try a new one.':'Solved it. Try the next build.';successChime();toast('Solved!');}
         return true;
@@ -428,7 +439,8 @@
     function hitPiece(x,y){for(let i=pieces.length-1;i>=0;i--){const p=pieces[i];if(p.locked)continue;if(Math.hypot(x-p.x,y-p.y)<p.size*1.5)return p;}return null;}
     c.addEventListener('pointerdown',e=>{if(mode==='pattern')return;const q=point(e),p=hitPiece(q.x,q.y);if(!p)return;selected=p;drag={p,dx:q.x-p.x,dy:q.y-p.y};pieces.splice(pieces.indexOf(p),1);pieces.push(p);c.setPointerCapture(e.pointerId);tone(260,.035,'sine',.025);draw();});
     c.addEventListener('pointermove',e=>{if(!drag)return;const q=point(e),{w,h}=dims(),p=drag.p;p.x=Math.max(p.size,Math.min(w-p.size,q.x-drag.dx));p.y=Math.max(p.size,Math.min(h-p.size,q.y-drag.dy));draw();});
-    c.addEventListener('pointerup',()=>{if(!drag)return;const p=drag.p;drag=null;if(!snapPiece(p)&&mode!=='free')tone(190,.05,'sine',.025);draw();});
+    function endDrag(){if(!drag)return;const p=drag.p;drag=null;if(!snapPiece(p)&&mode!=='free')tone(190,.05,'sine',.025);draw();}
+    c.addEventListener('pointerup',endDrag);c.addEventListener('pointercancel',endDrag);
 
     function rotate(dir){if(!selected||selected.locked)return;selected.rot=(selected.rot+dir*45+360)%360;tone(dir>0?390:330,.045,'triangle',.03);draw();}
     $('#shapeRotateLeft').addEventListener('click',()=>rotate(-1));$('#shapeRotateRight').addEventListener('click',()=>rotate(1));
@@ -1011,12 +1023,12 @@
     const beam=$('#balanceBeam'),left=$('#balanceLeft'),right=$('#balanceRight'),msg=$('#balanceMessage');
     function makeChallenge(){
       weights=[];total=0;solved=false;const max=6+level*2;target=3+Math.floor(Math.random()*Math.max(2,max-2));
-      $('#balanceTarget').textContent=target;$('#balanceTotal').textContent=0;$('#balanceLevel').textContent=`Level ${level+1}`;left.innerHTML=renderBlocks(target,'fixed');right.innerHTML='';beam.style.transform='rotate(-7deg)';msg.textContent='Try different combinations. There can be more than one solution.';
+      $('#balanceTarget').textContent=target;$('#balanceTotal').textContent=0;$('#balanceLevel').textContent=`Level ${level+1}`;left.innerHTML=renderBlocks(target,'fixed');right.innerHTML='';beam.style.transform='translateX(-50%) rotate(-7deg)';msg.textContent='Try different combinations. There can be more than one solution.';
     }
     function renderBlocks(n,cls=''){let remain=n,out='';for(const v of [5,3,2,1])while(remain>=v){out+=`<span class="balance-block ${cls} b${v}">${v}</span>`;remain-=v;}return out;}
     function update(){
       if(solved)return;total=weights.reduce((a,b)=>a+b,0);$('#balanceTotal').textContent=total;right.innerHTML=weights.map(v=>`<span class="balance-block b${v}">${v}</span>`).join('');
-      const diff=Math.max(-1,Math.min(1,(total-target)/Math.max(target,1)));beam.style.transform=`rotate(${diff*9}deg)`;
+      const diff=Math.max(-1,Math.min(1,(total-target)/Math.max(target,1)));beam.style.transform=`translateX(-50%) rotate(${diff*9}deg)`;
       if(total===target){solved=true;successChime();msg.textContent='Balanced! You found a combination.';level=Math.min(8,level+1);localStorage.setItem('jakjak.balance.level',String(level));setTimeout(makeChallenge,1100);}else if(total>target){tone(170,.06,'sine',.025);msg.textContent='That side is heavier. Remove or change a weight.';}else msg.textContent=`The right side needs ${target-total} more.`;
     }
     $$('.weight-btn').forEach(b=>b.addEventListener('click',()=>{weights.push(+b.dataset.weight);tone(280+weights.length*18,.05,'sine',.03);update();}));
