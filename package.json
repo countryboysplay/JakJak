@@ -1,0 +1,12 @@
+{
+  "name": "jakjak",
+  "private": true,
+  "description": "Dev-only tooling: the app itself is build-free and needs none of this.",
+  "scripts": {
+    "check": "node --check app.js && node --check sw.js",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
