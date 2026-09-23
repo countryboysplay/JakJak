@@ -24,7 +24,8 @@
     calmMotion: true,
     choiceCount: 12,
     sessionMinutes: 0,
-    warningMinutes: 5
+    warningMinutes: 5,
+    version: 2
   };
 
   const state = {
@@ -35,7 +36,8 @@
     warningTimer: null,
     audioCtx: null,
     masterGain: null,
-    heldTimer: null
+    heldTimer: null,
+    toyTimers: new Set()
   };
 
   const homeScreen = $('#homeScreen');
@@ -55,11 +57,13 @@
       const merged = { ...DEFAULTS, ...saved };
       // Migrations: keep new toys visible for existing installs without disturbing
       // deliberately compact 4-toy home screens.
+      // Runs once per upgrade, so a parent can still switch these toys off afterwards.
       if (!Array.isArray(merged.enabledToys)) merged.enabledToys = [...DEFAULTS.enabledToys];
-      if (!merged.enabledToys.includes('basketball')) merged.enabledToys.push('basketball');
-      if (!merged.enabledToys.includes('bowling')) merged.enabledToys.push('bowling');
-      for (const id of ['logic','balance','circuits','machine']) if (!merged.enabledToys.includes(id)) merged.enabledToys.push(id);
-      if ([6,7,8,9,10,11].includes(saved.choiceCount ?? 6)) merged.choiceCount = 12;
+      if ((saved.version || 1) < 2) {
+        for (const id of ['basketball','bowling','logic','balance','circuits','machine']) if (!merged.enabledToys.includes(id)) merged.enabledToys.push(id);
+        if ([6,7,8,9,10,11].includes(saved.choiceCount ?? 6)) merged.choiceCount = 12;
+        merged.version = DEFAULTS.version;
+      }
       return merged;
     } catch { return { ...DEFAULTS, enabledToys:[...DEFAULTS.enabledToys] }; }
   }
@@ -96,6 +100,7 @@
     gameMount.innerHTML = '';
     const makers = { tinker:makeTinker, shapes:makeShapes, creature:makeCreature, marbles:makeMarbles, basketball:makeBasketball, bowling:makeBowling, numbers:makeNumbers, logic:makeLogicTracks, balance:makeBalanceLab, circuits:makeCircuitLab, machine:makeNumberMachine, sounds:makeSounds };
     state.cleanup = makers[id]?.() || null;
+    window.scrollTo(0, 0);
     $('#main').focus({preventScroll:true});
   }
   function goHome(){
@@ -103,10 +108,13 @@
     gameScreen.classList.remove('active'); homeScreen.classList.add('active');
     homeButton.classList.add('hidden'); resetButton.classList.add('hidden');
     gameMount.innerHTML = '';
+    window.scrollTo(0, 0);
     $('#main').focus({preventScroll:true});
   }
   function resetToy(){ if (state.currentToy) openToy(state.currentToy); }
-  function cleanupToy(){ if (typeof state.cleanup === 'function') { try{state.cleanup();}catch{} } state.cleanup = null; }
+  function cleanupToy(){ if (typeof state.cleanup === 'function') { try{state.cleanup();}catch{} } state.cleanup = null; state.toyTimers.forEach(clearTimeout); state.toyTimers.clear(); }
+  // Timeouts that belong to the open toy; cleared when the toy is reset or closed.
+  function later(fn, ms){ const id = setTimeout(() => { state.toyTimers.delete(id); fn(); }, ms); state.toyTimers.add(id); return id; }
 
   function ensureAudio(){
     if (!state.audioCtx) {
@@ -117,7 +125,7 @@
       state.masterGain.gain.value = Number(state.settings.volume);
       state.masterGain.connect(state.audioCtx.destination);
     }
-    if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+    if (state.audioCtx.state !== 'running') state.audioCtx.resume().catch(()=>{});
     return state.audioCtx;
   }
   function tone(freq=440, duration=.16, type='sine', gain=.12){
@@ -208,7 +216,7 @@
     $('#tinkLaunch').addEventListener('click',launch);
     speedInput.addEventListener('input',e=>{speed=+e.target.value;speedLabel.textContent=`${speed}%`;if(speed%10<2)tone(180+speed*2.3,.035,'sine',.025);});
     $$('.tinker-color').forEach(btn=>btn.addEventListener('click',()=>{ballColor=btn.dataset.tinkColor;localStorage.setItem('jakjak.tinker.ball',ballColor);$$('.tinker-color').forEach(b=>b.classList.toggle('active',b===btn));tone(340,.05,'sine',.03);}));
-    c.addEventListener('pointerdown',e=>{const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;balls.push({x,y,vx:(Math.random()-.5)*90,vy:-80,r:13,color:ballColor,captured:false});tone(230,.05,'sine',.025);});
+    c.addEventListener('pointerdown',e=>{const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;balls.push({x,y,vx:(Math.random()-.5)*90,vy:-80,r:13,color:ballColor,captured:false});if(balls.length>40)balls.shift();tone(230,.05,'sine',.025);});
 
     function circleCollision(ball,cx,cy,cr,boost=0){
       const dx=ball.x-cx,dy=ball.y-cy,d=Math.hypot(dx,dy),min=ball.r+cr;if(d<=0||d>=min)return;
@@ -421,8 +429,8 @@
         ctx.fillStyle='rgba(36,48,58,.62)';ctx.font='900 12px system-ui';ctx.textAlign='center';ctx.fillText('MAKE BOTH SIDES MATCH',w/2,22);
       }
     }
-    function angleDiff(a,b){let d=Math.abs(((a-b+180)%360)-180);return d;}
-    function rotOkay(piece,target){if(piece.type==='circle'||piece.type==='square'||piece.type==='diamond')return true;return angleDiff(piece.rot,target.rot)<28;}
+    function angleDiff(a,b,period=360){const d=((a-b)%period+period)%period;return Math.min(d,period-d);}
+    function rotOkay(piece,target){if(piece.type==='circle'||piece.type==='square'||piece.type==='diamond')return true;return angleDiff(piece.rot,target.rot,piece.type==='rect'?180:360)<28;}
     function snapPiece(piece){
       if(mode==='free')return false;
       let best=null,bd=Infinity;
@@ -437,9 +445,9 @@
     }
     function point(e){const r=c.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
     function hitPiece(x,y){for(let i=pieces.length-1;i>=0;i--){const p=pieces[i];if(p.locked)continue;if(Math.hypot(x-p.x,y-p.y)<p.size*1.5)return p;}return null;}
-    c.addEventListener('pointerdown',e=>{if(mode==='pattern')return;const q=point(e),p=hitPiece(q.x,q.y);if(!p)return;selected=p;drag={p,dx:q.x-p.x,dy:q.y-p.y};pieces.splice(pieces.indexOf(p),1);pieces.push(p);c.setPointerCapture(e.pointerId);tone(260,.035,'sine',.025);draw();});
-    c.addEventListener('pointermove',e=>{if(!drag)return;const q=point(e),{w,h}=dims(),p=drag.p;p.x=Math.max(p.size,Math.min(w-p.size,q.x-drag.dx));p.y=Math.max(p.size,Math.min(h-p.size,q.y-drag.dy));draw();});
-    function endDrag(){if(!drag)return;const p=drag.p;drag=null;if(!snapPiece(p)&&mode!=='free')tone(190,.05,'sine',.025);draw();}
+    c.addEventListener('pointerdown',e=>{if(mode==='pattern')return;const q=point(e),p=hitPiece(q.x,q.y);if(!p)return;selected=p;drag={p,dx:q.x-p.x,dy:q.y-p.y,id:e.pointerId};pieces.splice(pieces.indexOf(p),1);pieces.push(p);c.setPointerCapture(e.pointerId);tone(260,.035,'sine',.025);draw();});
+    c.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const q=point(e),{w,h}=dims(),p=drag.p;p.x=Math.max(p.size,Math.min(w-p.size,q.x-drag.dx));p.y=Math.max(p.size,Math.min(h-p.size,q.y-drag.dy));draw();});
+    function endDrag(e){if(!drag||e.pointerId!==drag.id)return;const p=drag.p;drag=null;if(!snapPiece(p)&&mode!=='free')tone(190,.05,'sine',.025);draw();}
     c.addEventListener('pointerup',endDrag);c.addEventListener('pointercancel',endDrag);
 
     function rotate(dir){if(!selected||selected.locked)return;selected.rot=(selected.rot+dir*45+360)%360;tone(dir>0?390:330,.045,'triangle',.03);draw();}
@@ -483,7 +491,7 @@
     const parts=['👀','👁️','👃','👄','😁','🦷','👂','🦄','🎀','👒','⭐','🌼','🕶️']; const tray=$('#partTray'), canvas=$('#creatureCanvas');
     parts.forEach((p,i)=>{const b=document.createElement('button');b.className='part-chip';b.textContent=p;b.setAttribute('aria-label','Creature part');b.addEventListener('click',()=>addPart(p));tray.appendChild(b)});
     function addPart(p){const el=document.createElement('div');el.className='creature-part';el.textContent=p;el.style.left=`${35+Math.random()*30}%`;el.style.top=`${28+Math.random()*38}%`;canvas.appendChild(el);makeDraggable(el);tone(320+Math.random()*300,.1)}
-    function makeDraggable(el){let dx=0,dy=0,drag=false;el.addEventListener('pointerdown',e=>{drag=true;const r=el.getBoundingClientRect();dx=e.clientX-r.left;dy=e.clientY-r.top;el.setPointerCapture(e.pointerId)});el.addEventListener('pointermove',e=>{if(!drag)return;const r=canvas.getBoundingClientRect();el.style.left=`${Math.max(0,Math.min(r.width-55,e.clientX-r.left-dx))}px`;el.style.top=`${Math.max(0,Math.min(r.height-55,e.clientY-r.top-dy))}px`});el.addEventListener('pointerup',()=>drag=false)}
+    function makeDraggable(el){let dx=0,dy=0,drag=false;el.addEventListener('pointerdown',e=>{drag=true;const r=el.getBoundingClientRect();dx=e.clientX-r.left;dy=e.clientY-r.top;el.setPointerCapture(e.pointerId)});el.addEventListener('pointermove',e=>{if(!drag)return;const r=canvas.getBoundingClientRect();el.style.left=`${Math.max(0,Math.min(r.width-55,e.clientX-r.left-dx))}px`;el.style.top=`${Math.max(0,Math.min(r.height-55,e.clientY-r.top-dy))}px`});const stop=()=>drag=false;el.addEventListener('pointerup',stop);el.addEventListener('pointercancel',stop);el.addEventListener('lostpointercapture',stop)}
     addPart('👀'); addPart('👄');
   }
 
@@ -493,7 +501,7 @@
     const palette=['#E97863','#76A9D7','#79B9A6','#F2C45F','#9D8DC5','#D991A7'];
     function resize(){const r=c.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);c.width=r.width*dpr;c.height=r.height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)} resize();
     const ro=new ResizeObserver(resize);ro.observe(c);
-    function add(x=null,y=null){const r=c.getBoundingClientRect();balls.push({x:x??r.width*(.25+Math.random()*.5),y:y??25,vx:(Math.random()-.5)*120,vy:0,r:14+Math.random()*10,color:palette[Math.floor(Math.random()*palette.length)]});tone(220+Math.random()*250,.08,'sine',.04)}
+    function add(x=null,y=null){const r=c.getBoundingClientRect();if(balls.length>=40)balls.shift();balls.push({x:x??r.width*(.25+Math.random()*.5),y:y??25,vx:(Math.random()-.5)*120,vy:0,r:14+Math.random()*10,color:palette[Math.floor(Math.random()*palette.length)]});tone(220+Math.random()*250,.08,'sine',.04)}
     function step(now){if(!running)return;const dt=Math.min(.03,(now-last)/1000);last=now;const w=c.clientWidth,h=c.clientHeight;ctx.clearRect(0,0,w,h);ctx.fillStyle='rgba(255,255,255,.55)';ctx.fillRect(0,h*.68,w,8);ctx.fillRect(w*.08,h*.45,w*.34,8);ctx.fillRect(w*.58,h*.28,w*.32,8);
       for(const b of balls){b.vy+=620*dt;b.x+=b.vx*dt;b.y+=b.vy*dt;const floors=[{x:0,y:h*.68,w},{x:w*.08,y:h*.45,w:w*.34},{x:w*.58,y:h*.28,w:w*.32}];for(const f of floors){if(b.x+b.r>f.x&&b.x-b.r<f.x+f.w&&b.y+b.r>f.y&&b.y-b.r<f.y&&b.vy>0){b.y=f.y-b.r;b.vy*=-.68;b.vx*=.985}}if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)*.8}if(b.x+b.r>w){b.x=w-b.r;b.vx=-Math.abs(b.vx)*.8}if(b.y-b.r>h+40){b.y=10;b.vy=0}ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=b.color;ctx.fill();ctx.beginPath();ctx.arc(b.x-b.r*.28,b.y-b.r*.30,b.r*.25,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.55)';ctx.fill()}requestAnimationFrame(step)}
     c.addEventListener('pointerdown',e=>{const r=c.getBoundingClientRect();add(e.clientX-r.left,e.clientY-r.top)});$('#addMarble').addEventListener('click',()=>add());$('#clearMarbles').addEventListener('click',()=>balls=[]);for(let i=0;i<3;i++)add();requestAnimationFrame(step);
@@ -521,7 +529,7 @@
     const c=$('#basketballCanvas'),ctx=c.getContext('2d');
     let running=true,last=performance.now(),mode='free',score=0,streak=0;
     let best=Number(localStorage.getItem('jakjak.basketball.best')||0);
-    let aiming=false,startPointer=null,currentPointer=null,shotActive=false,shotAge=0,resetDelay=0;
+    let aiming=false,aimId=null,startPointer=null,currentPointer=null,shotActive=false,shotAge=0,resetDelay=0;
     let previousBallY=0,hitBackboard=false,scoredThisShot=false,missCounted=false;
     let aroundIndex=0,movingPhase=0;
     const aroundSpots=[0.28,0.16,0.39,0.10,0.47];
@@ -556,7 +564,7 @@
     function resize(){
       const r=c.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
       c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
-      setHoop(); if(!shotActive) resetBall();
+      setHoop(); if(!shotActive&&!aiming&&resetDelay<=0) resetBall();
     }
     resize(); const ro=new ResizeObserver(resize);ro.observe(c);
 
@@ -576,7 +584,7 @@
     }
     function recordMiss(){
       if(missCounted||scoredThisShot)return;
-      missCounted=true;streak=0;updateHud();
+      missCounted=true;streak=0;updateHud();if(resetDelay<=0)resetDelay=.9;
       if(mode==='bank')setMessage('Try hitting the square on the backboard.');
       else if(mode==='around')setMessage('Same spot. Adjust and try again.');
       else setMessage('Close. Change the angle or power.');
@@ -589,10 +597,11 @@
     }
     $$('.bb-mode').forEach(b=>b.addEventListener('click',()=>switchMode(b.dataset.bbMode)));
 
+    function flickScale(len){return Math.min(7.2,Math.max(4.8,920/Math.max(120,len)));}
     function launch(dx,dy){
       const len=Math.hypot(dx,dy); if(len<26)return;
       // Direct flick physics: quick/long upward motion = more power. Horizontal aim matters.
-      const scale=Math.min(7.2,Math.max(4.8,920/Math.max(120,len)));
+      const scale=flickScale(len);
       ball.vx=dx*scale;
       ball.vy=dy*scale;
       // Keep obviously downward releases playable, but do not auto-aim the shot.
@@ -607,11 +616,11 @@
       if(shotActive||resetDelay>0)return;
       const p=point(e),dist=Math.hypot(p.x-ball.x,p.y-ball.y);
       if(dist>Math.max(68,ball.r*3.4))return;
-      aiming=true;startPointer=p;currentPointer=p;c.setPointerCapture(e.pointerId);e.preventDefault();
+      aiming=true;aimId=e.pointerId;startPointer=p;currentPointer=p;c.setPointerCapture(e.pointerId);e.preventDefault();
     });
-    c.addEventListener('pointermove',e=>{if(!aiming)return;currentPointer=point(e);e.preventDefault();});
+    c.addEventListener('pointermove',e=>{if(!aiming||e.pointerId!==aimId)return;currentPointer=point(e);e.preventDefault();});
     c.addEventListener('pointerup',e=>{
-      if(!aiming)return;currentPointer=point(e);aiming=false;
+      if(!aiming||e.pointerId!==aimId)return;currentPointer=point(e);aiming=false;
       launch(currentPointer.x-startPointer.x,currentPointer.y-startPointer.y);e.preventDefault();
     });
     c.addEventListener('pointercancel',()=>{aiming=false;});
@@ -654,7 +663,7 @@
     function drawAim(){
       if(!aiming||!startPointer||!currentPointer)return;
       const dx=currentPointer.x-startPointer.x,dy=currentPointer.y-startPointer.y;
-      let vx=dx*5.7,vy=dy*5.7;if(vy>-180)vy=-180-Math.min(240,Math.hypot(dx,dy)*1.25);
+      const k=flickScale(Math.hypot(dx,dy));let vx=dx*k,vy=dy*k;if(vy>-180)vy=-180-Math.min(240,Math.hypot(dx,dy)*1.25);
       ctx.fillStyle='rgba(66,82,94,.38)';
       for(let i=1;i<=8;i++){const t=i*.10,x=ball.x+vx*t,y=ball.y+vy*t+450*t*t;ctx.beginPath();ctx.arc(x,y,Math.max(2,5-i*.35),0,Math.PI*2);ctx.fill();}
       ctx.strokeStyle='rgba(66,82,94,.35)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(startPointer.x,startPointer.y);ctx.lineTo(currentPointer.x,currentPointer.y);ctx.stroke();
@@ -672,7 +681,7 @@
         if(crossed&&inside){if(mode!=='bank'||hitBackboard)recordMake();else{scoredThisShot=true;setMessage('That went in — now try a bank shot!');tone(420,.12);resetDelay=.65;}}
         const {w,h}=dimensions();
         if(ball.y+ball.r>h-10){ball.y=h-10-ball.r;if(Math.abs(ball.vy)>90){ball.vy=-Math.abs(ball.vy)*.52;ball.vx*=.76}else{ball.vy=0;ball.vx*=.9;}if(shotAge>.7&&!scoredThisShot)recordMiss();}
-        if(ball.x<-80||ball.x>w+100||ball.y>h+120||shotAge>6){if(!scoredThisShot)recordMiss();resetDelay=.45;}
+        if((ball.x<-80||ball.x>w+100||ball.y>h+120||shotAge>6)&&resetDelay<=0){if(!scoredThisShot)recordMiss();resetDelay=.45;}
       }
       drawCourt();drawAim();drawBall();requestAnimationFrame(step);
     }
@@ -712,7 +721,7 @@
     const c=$('#bowlingCanvas'),ctx=c.getContext('2d');
     const pinsEl=$('#bowlPins'),strikesEl=$('#bowlStrikes'),bestEl=$('#bowlBest'),messageEl=$('#bowlMessage');
     let running=true,last=performance.now(),mode='rack',ballColor=savedColor;
-    let pins=[],aiming=false,startPointer=null,currentPointer=null,shotActive=false,shotAge=0,settle=0;
+    let pins=[],aiming=false,aimId=null,startPointer=null,currentPointer=null,shotActive=false,shotAge=0,settle=0;
     let roll=1,strikes=0,strikeStreak=0,best=Number(localStorage.getItem('jakjak.bowling.best')||0),spares=0;
     let gutter=false,rollStartStanding=10,rackComplete=false;
     const ball={x:0,y:0,vx:0,vy:0,r:16,spin:0,rotation:0};
@@ -727,7 +736,7 @@
     }
     function freshRack(pattern=null){
       const pos=rackPositions();
-      pins=pos.map((p,i)=>({id:i,x:p.x,y:p.y,homeX:p.x,homeY:p.y,vx:0,vy:0,r:10.5,down:false,angle:0,spin:0,visible:pattern?pattern.includes(i):true}));
+      pins=pos.map((p,i)=>({id:i,x:p.x,y:p.y,homeX:p.x,homeY:p.y,vx:0,vy:0,r:Math.min(10.5,Math.min(27,dims().w*.055)*.5),down:false,angle:0,spin:0,visible:pattern?pattern.includes(i):true}));
       roll=1;rackComplete=false;updateHud();resetBall();
     }
     function spareRack(){
@@ -753,7 +762,8 @@
         const pos=rackPositions();
         if(pins.length) pins.forEach(p=>{p.homeX=pos[p.id].x;p.homeY=pos[p.id].y;if(!p.down){p.x=p.homeX;p.y=p.homeY;}});
         else freshRack();
-        resetBall();
+        // Resetting mid-settle would cancel the pending rack change; mid-aim it would drop the swipe.
+        if(!(settle>0||aiming))resetBall();
       }
     }
     resize();const ro=new ResizeObserver(resize);ro.observe(c);
@@ -775,11 +785,11 @@
     function pointer(e){const r=c.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
     c.addEventListener('pointerdown',e=>{
       if(shotActive||settle>0)return;const p=pointer(e);if(Math.hypot(p.x-ball.x,p.y-ball.y)>70)return;
-      aiming=true;startPointer=p;currentPointer=p;c.setPointerCapture(e.pointerId);e.preventDefault();
+      aiming=true;aimId=e.pointerId;startPointer=p;currentPointer=p;c.setPointerCapture(e.pointerId);e.preventDefault();
     });
-    c.addEventListener('pointermove',e=>{if(!aiming)return;currentPointer=pointer(e);e.preventDefault();});
+    c.addEventListener('pointermove',e=>{if(!aiming||e.pointerId!==aimId)return;currentPointer=pointer(e);e.preventDefault();});
     c.addEventListener('pointerup',e=>{
-      if(!aiming)return;currentPointer=pointer(e);aiming=false;
+      if(!aiming||e.pointerId!==aimId)return;currentPointer=pointer(e);aiming=false;
       const dx=currentPointer.x-startPointer.x,dy=currentPointer.y-startPointer.y,len=Math.hypot(dx,dy);
       if(len<28||dy>-10){setMessage('Swipe the ball up the lane.');return;}
       const power=Math.min(1.15,Math.max(.55,len/175));
@@ -910,7 +920,7 @@
       <div id="numberMessage" class="thinking-message">Tap apples to build the target number.</div>
     </div>`;
     const play=$('#numberPlay'),msg=$('#numberMessage');
-    function win(text){if(locked)return;locked=true;successChime();msg.textContent=text;level=Math.min(9,level+1);localStorage.setItem('jakjak.numbers.level',String(level));$('#numberLevel').textContent=`LEVEL ${level+1}`;setTimeout(setup,950);}
+    function win(text){if(locked)return;locked=true;successChime();msg.textContent=text;level=Math.min(9,level+1);localStorage.setItem('jakjak.numbers.level',String(level));$('#numberLevel').textContent=`LEVEL ${level+1}`;later(setup,950);}
     function setup(){
       locked=false;$('#numberLevel').textContent=`LEVEL ${level+1}`;
       if(mode==='count')setupCount();else if(mode==='compare')setupCompare();else if(mode==='make')setupMake();else setupSequence();
@@ -923,8 +933,10 @@
       for(let i=0;i<target+3;i++){const b=document.createElement('button');b.className='smart-apple';b.textContent='🍎';b.addEventListener('click',()=>{if(b.parentElement===tray){basket.appendChild(b);count++;}else{tray.appendChild(b);count--;}$('#numberReadout').textContent=`${count} of ${target}`;tone(280+count*28,.045,'sine',.025);if(count===target)win(`${target}. Exactly right.`);});tray.appendChild(b)}
     }
     function setupCompare(){
-      let a=1+Math.floor(Math.random()*(5+level)),b=1+Math.floor(Math.random()*(5+level));if(level<5&&a===b)b=a===1?2:a-1;
-      const askEqual=level>=5&&Math.random()<.25&&a===b;const askLess=!askEqual&&Math.random()<.45;const correct=askEqual?'equal':askLess?(a<b?'a':'b'):(a>b?'a':'b');
+      let a=1+Math.floor(Math.random()*(5+level)),b=1+Math.floor(Math.random()*(5+level));
+      // Equal groups only when the Equal button is offered; otherwise more/fewer would have no right answer.
+      if(a===b&&(level<5||Math.random()>=.25))b=a===1?2:a-1;
+      const askEqual=a===b;const askLess=!askEqual&&Math.random()<.45;const correct=askEqual?'equal':askLess?(a<b?'a':'b'):(a>b?'a':'b');
       $('#numberPrompt').textContent=askEqual?'Are they equal?':`Which side has ${askLess?'fewer':'more'}?`;msg.textContent='Look at the groups before choosing.';
       const apples=n=>Array.from({length:n},()=>'<span>🍎</span>').join('');
       play.innerHTML=`<div class="compare-layout"><button class="compare-card" data-side="a"><strong>${a}</strong><div>${apples(a)}</div></button><div class="compare-symbol">?</div><button class="compare-card" data-side="b"><strong>${b}</strong><div>${apples(b)}</div></button></div>${askEqual?'<button class="pill-btn equal-choice" data-side="equal">They are equal</button>':''}`;
@@ -938,7 +950,7 @@
       $$('.number-choice',play).forEach(b=>b.addEventListener('click',()=>{if(picks.length===2)picks=[];picks.push(+b.dataset.n);tone(300+picks.length*60,.045,'triangle',.025);render();}));$('#makeClear').addEventListener('click',()=>{picks=[];render();});
     }
     function setupSequence(){
-      const step=level<3?1:level<6?(Math.random()<.5?2:3):(Math.random()<.5?2:4),descending=level>=7&&Math.random()<.35,start=descending?8+Math.floor(Math.random()*8):1+Math.floor(Math.random()*4),seq=[];for(let i=0;i<4;i++)seq.push(start+(descending?-step:step)*i);const answer=start+(descending?-step:step)*4;
+      const step=level<3?1:level<6?(Math.random()<.5?2:3):(Math.random()<.5?2:4),descending=level>=7&&Math.random()<.35,start=descending?step*5+Math.floor(Math.random()*5):1+Math.floor(Math.random()*4),seq=[];for(let i=0;i<4;i++)seq.push(start+(descending?-step:step)*i);const answer=start+(descending?-step:step)*4;
       const choices=[answer,answer+(descending?-1:1)*step,Math.max(0,answer+(descending?1:-1)*step)].sort(()=>Math.random()-.5);
       $('#numberPrompt').textContent='What comes next?';msg.textContent='Find the rule in the number pattern.';
       play.innerHTML=`<div class="sequence-lab"><div class="number-sequence">${seq.map(n=>`<span>${n}</span>`).join('<b>→</b>')}<b>→</b><span class="mystery">?</span></div><div class="sequence-choices">${choices.map(n=>`<button data-answer="${n}">${n}</button>`).join('')}</div></div>`;
@@ -1000,7 +1012,7 @@
         const dir=commands[i++],d={up:[-1,0],right:[0,1],down:[1,0],left:[0,-1]}[dir],nr=robot[0]+d[0],nc=robot[1]+d[1],L=levels[level],blocked=nr<0||nc<0||nr>=L.n||nc>=L.n||L.rocks.some(([r,c])=>r===nr&&c===nc);
         if(blocked){running=false;tone(140,.13,'sine',.04);msg.textContent='Blocked. Change the plan and try again.';return;}
         robot=[nr,nc];renderGrid();tone(260+i*18,.045,'sine',.025);
-        if(robot[0]===L.goal[0]&&robot[1]===L.goal[1]){running=false;successChime();msg.textContent='You solved it! A harder track is ready.';level=Math.min(levels.length-1,level+1);localStorage.setItem('jakjak.logic.level',String(level));setTimeout(setup,1100);return;}
+        if(robot[0]===L.goal[0]&&robot[1]===L.goal[1]){running=false;successChime();msg.textContent='You solved it! A harder track is ready.';level=Math.min(levels.length-1,level+1);localStorage.setItem('jakjak.logic.level',String(level));later(setup,1100);return;}
         stepTimer=setTimeout(tick,380);
       };tick();
     });
@@ -1029,7 +1041,7 @@
     function update(){
       if(solved)return;total=weights.reduce((a,b)=>a+b,0);$('#balanceTotal').textContent=total;right.innerHTML=weights.map(v=>`<span class="balance-block b${v}">${v}</span>`).join('');
       const diff=Math.max(-1,Math.min(1,(total-target)/Math.max(target,1)));beam.style.transform=`translateX(-50%) rotate(${diff*9}deg)`;
-      if(total===target){solved=true;successChime();msg.textContent='Balanced! You found a combination.';level=Math.min(8,level+1);localStorage.setItem('jakjak.balance.level',String(level));setTimeout(makeChallenge,1100);}else if(total>target){tone(170,.06,'sine',.025);msg.textContent='That side is heavier. Remove or change a weight.';}else msg.textContent=`The right side needs ${target-total} more.`;
+      if(total===target){solved=true;successChime();msg.textContent='Balanced! You found a combination.';level=Math.min(8,level+1);localStorage.setItem('jakjak.balance.level',String(level));later(makeChallenge,1100);}else if(total>target){tone(170,.06,'sine',.025);msg.textContent='That side is heavier. Remove or change a weight.';}else msg.textContent=`The right side needs ${target-total} more.`;
     }
     $$('.weight-btn').forEach(b=>b.addEventListener('click',()=>{weights.push(+b.dataset.weight);tone(280+weights.length*18,.05,'sine',.03);update();}));
     $('#balanceUndo').addEventListener('click',()=>{weights.pop();update();});$('#balanceNew').addEventListener('click',makeChallenge);makeChallenge();
@@ -1072,7 +1084,7 @@
       const complete=slots.every(id=>{const p=part(id);return p.conducts&&(!p.switch||switchOn)});
       $('#circuitState').textContent=complete?'CLOSED':'OPEN';$('#circuitState').classList.toggle('on',complete);$('#circuitDevice').classList.toggle('powered',complete);
       $('#circuitSwitch').textContent=switchOn?'Switch: ON':'Switch: OFF';
-      if(complete&&!solved){solved=true;successChime();msg.textContent=`Circuit complete — the ${d[1].toLowerCase()} is powered!`;level=Math.min(7,level+1);localStorage.setItem('jakjak.circuit.level',String(level));setTimeout(newChallenge,1300);}
+      if(complete&&!solved){solved=true;successChime();msg.textContent=`Circuit complete — the ${d[1].toLowerCase()} is powered!`;level=Math.min(7,level+1);localStorage.setItem('jakjak.circuit.level',String(level));later(newChallenge,1300);}
     }
     slotEls.forEach((el,i)=>el.addEventListener('click',()=>{selected=i;render();tone(260,.04,'sine',.025);}));
     $$('.circuit-part').forEach(b=>b.addEventListener('click',()=>{slots[selected]=b.dataset.part;render();tone(330,.05,'triangle',.03);}));
@@ -1113,13 +1125,14 @@
     function newChallenge(){solved=false;target=solvableTarget();input=1;op1='+1';op2=level>=3?'none':'none';render();msg.textContent=level>=3?'You can use one or two machines. Find any combination that works.':'Find an input and operation that makes the target.';}
     $('#inputMinus').addEventListener('click',()=>{input=Math.max(1,input-1);render();tone(220,.04,'sine',.025);});$('#inputPlus').addEventListener('click',()=>{input=Math.min(level<3?5:8,input+1);render();tone(300,.04,'sine',.025);});
     $('#machineOp1').addEventListener('click',()=>{op1=cycle(op1,false);render();tone(360,.04,'triangle',.025);});$('#machineOp2').addEventListener('click',()=>{if(level<3){msg.textContent='The second machine unlocks after a few challenges.';tone(150,.05);return;}op2=cycle(op2,true);render();tone(390,.04,'triangle',.025);});
-    $('#machineCheck').addEventListener('click',()=>{if(solved)return;const out=output();if(out===target){solved=true;successChime();msg.textContent='Exactly! The machine made the target.';level=Math.min(8,level+1);localStorage.setItem('jakjak.machine.level',String(level));setTimeout(newChallenge,1100);}else{tone(170,.08,'sine',.035);msg.textContent=out<target?`You made ${out}. The target is bigger.`:`You made ${out}. The target is smaller.`;}});$('#machineNew').addEventListener('click',newChallenge);newChallenge();
+    $('#machineCheck').addEventListener('click',()=>{if(solved)return;const out=output();if(out===target){solved=true;successChime();msg.textContent='Exactly! The machine made the target.';level=Math.min(8,level+1);localStorage.setItem('jakjak.machine.level',String(level));later(newChallenge,1100);}else{tone(170,.08,'sine',.035);msg.textContent=out<target?`You made ${out}. The target is bigger.`:`You made ${out}. The target is smaller.`;}});$('#machineNew').addEventListener('click',newChallenge);newChallenge();
   }
 
   function makeSounds(){
     const pads=[['🌧️','Rain',261.63,'sine'],['☀️','Sun',329.63,'sine'],['🌿','Leaf',392,'triangle'],['💧','Drop',523.25,'sine'],['🌙','Moon',220,'sine'],['⭐','Star',659.25,'triangle']];
     gameMount.innerHTML=`<div class="sound-grid">${pads.map((p,i)=>`<button class="sound-pad" data-pad="${i}">${p[0]}<span>${p[1]}</span></button>`).join('')}</div>`;
-    $$('[data-pad]').forEach(btn=>btn.addEventListener('pointerdown',()=>{const p=pads[+btn.dataset.pad];tone(p[2],.35,p[3],.10)}));
+    const play=btn=>{const p=pads[+btn.dataset.pad];tone(p[2],.35,p[3],.10)};
+    $$('[data-pad]').forEach(btn=>{btn.addEventListener('pointerdown',()=>play(btn));btn.addEventListener('click',e=>{if(e.detail===0)play(btn);});});
   }
 
   function setupParentGate(){
@@ -1142,6 +1155,7 @@
       tapTimer=setTimeout(resetTaps,2500);
     });
     parentHotspot.addEventListener('contextmenu',e=>e.preventDefault());
+    $('#gateCancel').addEventListener('click',()=>parentGate.close());
     $('#gateForm').addEventListener('submit',e=>{e.preventDefault();if($('#gateAnswer').value.trim()==='11'){parentGate.close();openSettings()}else{$('#gateError').textContent='Try again.';tone(180,.12,'sine',.04)}});
   }
   function openSettings(){
@@ -1153,6 +1167,7 @@
   $('#resetSettings').addEventListener('click',()=>{
     state.settings={...DEFAULTS,enabledToys:[...DEFAULTS.enabledToys]};
     saveSettings();
+    setupSessionReminder();
     settingsDialog.close();
     openSettings();
   });

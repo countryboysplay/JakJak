@@ -117,3 +117,6 @@ body.calm-motion *,body.calm-motion *::before,body.calm-motion *::after{scroll-b
 .tinker-colors{display:flex;gap:8px;min-width:0;overflow-x:auto;padding:4px;scrollbar-width:none}.tinker-colors::-webkit-scrollbar{display:none}.tinker-color{width:36px;height:36px;flex:0 0 36px;border-radius:50%;border:3px solid rgba(47,61,69,.18);background:var(--tink-color);touch-action:manipulation}.tinker-color.active{outline:3px solid #2F3D45;outline-offset:2px}
 .tinker-message{text-align:center;min-height:28px;font-weight:850;color:var(--muted);font-size:.95rem}
 @media(min-width:760px){.tinker-controls{grid-template-columns:repeat(6,minmax(0,1fr))}}
+/* Phones: keep the play area and its controls closer to the fold */
+@media(max-width:520px){.game-heading{padding:0 8px 10px}.game-heading .eyebrow{display:none}.game-heading h2{font-size:1.8rem}.game-hint{font-size:.88rem;margin-top:2px}.shape-canvas{min-height:330px}.basketball-canvas{min-height:330px}.bowling-canvas{min-height:340px}}
+@media(orientation:landscape) and (max-height:500px){.topbar{position:static;padding-top:max(6px,env(safe-area-inset-top));padding-bottom:4px}.game-heading{padding:0 8px 6px}.game-heading .eyebrow,.game-hint{display:none}.game-heading h2{font-size:1.5rem}.shape-canvas,.basketball-canvas,.bowling-canvas,.marble-canvas,.tinker-canvas{height:calc(100dvh - 24px);min-height:260px}}

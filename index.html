@@ -32,7 +32,7 @@
         <div id="toyGrid" class="toy-grid" aria-label="Toy box"></div>
       </section>
 
-      <section id="gameScreen" class="screen" aria-live="polite">
+      <section id="gameScreen" class="screen">
         <div id="gameHeader" class="game-heading">
           <p id="gameKicker" class="eyebrow"></p>
           <h2 id="gameTitle"></h2>
@@ -54,7 +54,7 @@
         </label>
         <p id="gateError" class="error-text" aria-live="polite"></p>
         <div class="dialog-actions">
-          <button value="cancel" class="secondary-btn">Cancel</button>
+          <button id="gateCancel" type="button" class="secondary-btn">Cancel</button>
           <button id="gateSubmit" value="default" class="primary-btn">Continue</button>
         </div>
       </form>

@@ -49,7 +49,7 @@ The app uses relative URLs, so it works from a project path such as `https://use
 
 ## Offline / install
 
-The service worker caches the app shell and assets. v0.5 uses cache name `jakjak-v5` so previously installed builds update after redeployment.
+The service worker caches the app shell and assets, serves cached files instantly and refreshes them in the background, so a redeploy is picked up on the next launch. The cache name is `jakjak-v6`.
 
 On iPhone/iPad, open the site in Safari and use **Share → Add to Home Screen**.
 
